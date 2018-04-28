@@ -6,15 +6,29 @@ from datetime import datetime
 from pprint import pprint
 import json
 from socket import gethostname
-from confluent_kafka import Consumer, KafkaError, TopicPartition, OFFSET_BEGINNING
+from confluent_kafka import Consumer, KafkaError, TopicPartition, OFFSET_BEGINNING, TIMESTAMP_NOT_AVAILABLE 
 
-def _bytes2dict_deserialize(msg):
-    return json.loads(msg.decode('utf-8'))
+
+def _bytes2string(msg):
+    return msg.decode('utf-8')
+
+def _json2dict_deserialize(json_str):
+    return json.loads(json_str)
+
+def _json_pprint(dct):
+    p_json = json.dumps(dct, indent=4, sort_keys=True, ensure_ascii=False)
+    print(p_json)
 
 def main(options):
+    if options.hostname:
+        hostname = options.hostname
+    else:
+        hostname = gethostname()
+    group_id = f'python_search@{hostname}'
+    print(f'group_id = {group_id}')
     c = Consumer({
         'bootstrap.servers': options.bootstrap_servers,
-        'group.id': 'python_search@{0}'.format(gethostname()),
+        'group.id': group_id,
     })
     
     tp = TopicPartition(options.topic, 0, 0) #OFFSET_BEGINNING)
@@ -35,14 +49,19 @@ def main(options):
                 print(msg.error())
                 return
         offset = msg.offset()
+        message_string = _bytes2string(msg.value())
         try:
-            message = _bytes2dict_deserialize(msg.value()) 
+            message = _json2dict_deserialize(message_string)
         except json.decoder.JSONDecodeError:
             if options.show_warnings:
-                print('-> offset {0} : Json Deserialize Error'.format(offset)) 
+                print('-> offset {0} : deserialize error'.format(offset)) 
         else:
-            # ts_type, timestamp_value = msg.timestamp()
-            # recieved = datetime.fromtimestamp(timestamp_value)
+            ts_type, ts_ms_value = msg.timestamp()
+            if ts_type != TIMESTAMP_NOT_AVAILABLE and ts_ms_value:
+                ts_value = int(ts_ms_value / 1000)
+                recieved = datetime.fromtimestamp(ts_value)
+            else:
+                recieved = None
             try:
                 criteria = eval(options.filter)
             except (KeyError, TypeError) as e:
@@ -50,9 +69,12 @@ def main(options):
                 if options.show_warnings:
                     print(f'-> offset {offset} : {e}')
             if criteria == True:
-                # print('-> offset {0}, recieved {1:%d-%m-%Y %H:%M:%S}'.format(offset, recieved))
-                print('-> offset {0}'.format(offset))
-                pprint(message)
+                if recieved:
+                    print(f'-> offset {offset}, recieved {recieved:%d-%m-%Y %H:%M:%S}')
+                else:
+                    print(f'-> offset {offset}')
+                _json_pprint(message)
+                # pprint(message)
                 printed += 1
                 if options.number and printed >= options.number:
                     break
@@ -66,6 +88,7 @@ parser.add_option("-t", "--topic")
 parser.add_option("-f", "--filter")
 parser.add_option("-w", "--show_warnings", default='f')
 parser.add_option("-n", "--number", type="int")
+parser.add_option("-H", "--hostname")
 
 (options, args) = parser.parse_args()
 
