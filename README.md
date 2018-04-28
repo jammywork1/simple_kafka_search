@@ -3,6 +3,7 @@
 python script for fast search messages from kafka.
 
 You have variables for filter:
+  - message_string - message as string
   - message - json deserialized message to python dict
   - offset - integer offset value 
 
@@ -40,6 +41,8 @@ python3 main.py -s localhost:9092 -t test -f 'message.get("b") == 2'
 docker run --rm -it --network host jammywork1/simple_kafka_search -s localhost:9092 -t test -f 'message["b"] == 2'
 
 docker run --rm -it jammywork1/simple_kafka_search  -H \`hostname\` -s localhost:9092 -t test -w t -f 'message["b"] == 2' 
+
+docker run --rm -it jammywork1/simple_kafka_search  -H \`hostname\` -s localhost:9092 -t test -f '"Feel good" in message_string' 
 
 docker run --rm -it jammywork1/simple_kafka_search  -H 'vasya01_pc' -s localhost:9092 -t test -n 10 -f 'message["b"] == 2' 
 
